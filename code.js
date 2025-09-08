@@ -1,49 +1,55 @@
-// Parameters: tolerance for snapping
-const TOLERANCE_PX = 10;
-const TOLERANCE_DEG = 15;
+// Validator Plugin - Tangram
+// Erika Bartosova - 2025
 
-// Listen for messages from Figma UI or host app
-figma.ui.onmessage = async (msg) => {
-  if (msg.type === 'validate-shape') {
-    const { pieces, reference } = msg; 
-    // pieces = array of {x, y, width, height, rotation}
-    // reference = {imageUrl, width, height}
+figma.showUI(__html__, { width: 300, height: 150 });
 
-    // Fake validation for now (since real pixel overlay requires Canvas API)
-    // We’ll simulate with bounding box + tolerance checks
+// Default tolerance settings
+const DEFAULT_TOLERANCE = {
+  tolerancePx: 10,
+  toleranceDeg: 15,
+  ignoreCollisions: true
+};
 
-    let allInside = true;
-
-    for (const piece of pieces) {
-      // Approximate center position
-      const cx = piece.x + piece.width / 2;
-      const cy = piece.y + piece.height / 2;
-
-      // Check if within reference boundaries (simplified rectangle)
-      if (cx < -TOLERANCE_PX || cx > reference.width + TOLERANCE_PX ||
-          cy < -TOLERANCE_PX || cy > reference.height + TOLERANCE_PX) {
-        allInside = false;
-        break;
-      }
-
-      // Check rotation tolerance
-      const normalizedRotation = ((piece.rotation % 360) + 360) % 360;
-      const snapRotation = Math.round(normalizedRotation / TOLERANCE_DEG) * TOLERANCE_DEG;
-      const rotationDiff = Math.abs(normalizedRotation - snapRotation);
-
-      if (rotationDiff > TOLERANCE_DEG) {
-        allInside = false;
-        break;
-      }
-    }
-
-    if (allInside) {
-      figma.ui.postMessage({ type: 'validation-result', success: true });
-    } else {
-      figma.ui.postMessage({ type: 'validation-result', success: false });
-    }
+// Main message handler
+figma.ui.onmessage = (msg) => {
+  if (msg.type === 'validate') {
+    const { pieces, targetShape, options } = msg;
+    const result = validatePuzzle(pieces, targetShape, {
+      ...DEFAULT_TOLERANCE,
+      ...options
+    });
+    figma.ui.postMessage({ type: 'validationResult', result });
   }
 };
 
-// Show UI when plugin runs
-figma.showUI(__html__, { width: 300, height: 200 });
+// Validation function
+function validatePuzzle(pieces, targetShape, options) {
+  const { tolerancePx, toleranceDeg, ignoreCollisions } = options;
+
+  // 1) If collisions are ignored → allow free drag
+  if (ignoreCollisions) {
+    console.log("Collision detection disabled. Free drag mode.");
+  }
+
+  // 2) Compare each piece with the reference shape
+  const matches = pieces.map((piece) =>
+    checkOverlayMatch(piece, targetShape, tolerancePx, toleranceDeg)
+  );
+
+  // 3) Return true only if all pieces match
+  return matches.every(Boolean);
+}
+
+// Overlay match check (simplified placeholder)
+function checkOverlayMatch(piece, targetShape, tolerancePx, toleranceDeg) {
+  // In reality: you’d compare vector paths or use pixel overlay analysis
+  // Here we simulate by comparing positions and rotation to target
+  const dx = Math.abs(piece.x - targetShape[piece.id].x);
+  const dy = Math.abs(piece.y - targetShape[piece.id].y);
+  const dRot = Math.abs(piece.rotation - targetShape[piece.id].rotation);
+
+  const positionOk = dx <= tolerancePx && dy <= tolerancePx;
+  const rotationOk = dRot <= toleranceDeg;
+
+  return positionOk && rotationOk;
+}
