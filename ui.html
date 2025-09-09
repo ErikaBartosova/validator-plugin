@@ -52,8 +52,10 @@
   <script>
     const board = document.getElementById("board");
     const preview = document.getElementById("preview");
+    let targets = [];
+    let lastClicked = null;
 
-    // --- definice 7 základních dílků ---
+    // 7 základních dílků
     const pieces = [
       { id: "bigTriangle1", x: 20, y: 20, type: "triangle" },
       { id: "bigTriangle2", x: 120, y: 20, type: "triangle" },
@@ -64,10 +66,7 @@
       { id: "parallelogram", x: 320, y: 20, type: "parallelogram" }
     ];
 
-    // --- zatím prázdné řešení (bude se načítat z Figma souboru) ---
-    let targets = [];
-
-    // přidání dílků na board
+    // render dílků
     pieces.forEach(p => {
       const el = document.createElement("div");
       el.classList.add("piece");
@@ -77,12 +76,12 @@
       el.dataset.type = p.type;
       el.dataset.rotation = "0";
 
-      // pro zobrazení stačí jednoduchý tvar (barevný blok)
       el.style.width = "60px";
       el.style.height = "60px";
       el.style.background = "#aaa";
       el.style.opacity = "0.8";
 
+      el.addEventListener("click", () => { lastClicked = el; });
       board.appendChild(el);
       makeDraggable(el);
     });
@@ -104,6 +103,7 @@
           document.removeEventListener("mousemove", onMove);
           document.removeEventListener("mouseup", onUp);
           snapToNearest(el);
+          snapEdges(el);
         };
 
         document.addEventListener("mousemove", onMove);
@@ -118,6 +118,7 @@
       });
     }
 
+    // Snap na targety sneak peek
     function snapToNearest(el) {
       const id = el.dataset.id;
       const rect = el.getBoundingClientRect();
@@ -131,7 +132,6 @@
           const dx = x - target.x;
           const dy = y - target.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-
           if (dist < 12) {
             el.style.left = (target.x - rect.width/2) + "px";
             el.style.top = (target.y - rect.height/2) + "px";
@@ -140,6 +140,45 @@
         }
       }
     }
+
+    // Snap hran dílků
+    function snapEdges(el) {
+      const allPieces = document.querySelectorAll(".piece");
+      const rect = el.getBoundingClientRect();
+      for (const other of allPieces) {
+        if (other === el) continue;
+        const orect = other.getBoundingClientRect();
+        const boardRect = board.getBoundingClientRect();
+
+        // horizontální zarovnání
+        if (Math.abs(rect.right - orect.left) < 6) {
+          el.style.left = (orect.left - boardRect.left - rect.width) + "px";
+        }
+        if (Math.abs(rect.left - orect.right) < 6) {
+          el.style.left = (orect.right - boardRect.left) + "px";
+        }
+        // vertikální zarovnání
+        if (Math.abs(rect.bottom - orect.top) < 6) {
+          el.style.top = (orect.top - boardRect.top - rect.height) + "px";
+        }
+        if (Math.abs(rect.top - orect.bottom) < 6) {
+          el.style.top = (orect.bottom - boardRect.top) + "px";
+        }
+      }
+    }
+
+    // Keyboard ovládání šipkami
+    document.addEventListener("keydown", (e) => {
+      if (!lastClicked) return;
+      const step = 5;
+      const left = parseInt(lastClicked.style.left) || 0;
+      const top = parseInt(lastClicked.style.top) || 0;
+
+      if (e.key === "ArrowUp") lastClicked.style.top = (top - step) + "px";
+      if (e.key === "ArrowDown") lastClicked.style.top = (top + step) + "px";
+      if (e.key === "ArrowLeft") lastClicked.style.left = (left - step) + "px";
+      if (e.key === "ArrowRight") lastClicked.style.left = (left + step) + "px";
+    });
 
     document.getElementById("check").onclick = () => {
       const state = Array.from(document.querySelectorAll(".piece")).map(el => {
@@ -161,24 +200,23 @@
         } 
       }, "*");
     };
-let targets = [];
 
-onmessage = (event) => {
-  const msg = event.data.pluginMessage;
-  if (msg.type === "validation-result") {
-    if (msg.success) alert("🎉 Correct solution!");
-    else alert("Not yet, keep trying.");
-  }
-  if (msg.type === "solution-loaded") {
-    preview.innerHTML = msg.svg;
-    targets = msg.targets; // tady už máme spočítané targety
-  }
-  if (msg.type === "solution-error") {
-    preview.innerHTML = `<p style="color:red">${msg.error}</p>`;
-  }
-};
+    onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (msg.type === "validation-result") {
+        if (msg.success) alert("🎉 Correct solution!");
+        else alert("Not yet, keep trying.");
+      }
+      if (msg.type === "solution-loaded") {
+        preview.innerHTML = msg.svg;
+        targets = msg.targets;
+      }
+      if (msg.type === "solution-error") {
+        preview.innerHTML = `<p style="color:red">${msg.error}</p>`;
+      }
+    };
 
-    // pro začátek – načteme sneak peek pro Camel
+    // Default: načteme sneak peek pro Camel
     parent.postMessage({ pluginMessage: { type: 'load-solution', shapeName: 'Camel shape' }}, "*");
   </script>
 </body>
