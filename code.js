@@ -1,55 +1,64 @@
-// Validator Plugin - Tangram
-// Erika Bartosova - 2025
+// --- Parameters ---
+const TOLERANCE_PX = 15;   // snap vzdálenost
+const TOLERANCE_DEG = 15;  // snap rotace
 
-figma.showUI(__html__, { width: 300, height: 150 });
+// --- Messages from UI ---
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === 'validate-shape') {
+    const { pieces, solutions } = msg;
 
-// Default tolerance settings
-const DEFAULT_TOLERANCE = {
-  tolerancePx: 10,
-  toleranceDeg: 15,
-  ignoreCollisions: true
-};
-
-// Main message handler
-figma.ui.onmessage = (msg) => {
-  if (msg.type === 'validate') {
-    const { pieces, targetShape, options } = msg;
-    const result = validatePuzzle(pieces, targetShape, {
-      ...DEFAULT_TOLERANCE,
-      ...options
-    });
-    figma.ui.postMessage({ type: 'validationResult', result });
+    const success = validatePuzzle(pieces, solutions);
+    figma.ui.postMessage({ type: 'validation-result', success });
   }
 };
 
-// Validation function
-function validatePuzzle(pieces, targetShape, options) {
-  const { tolerancePx, toleranceDeg, ignoreCollisions } = options;
+// --- Validation ---
+function validatePuzzle(pieces, solutions) {
+  for (const solution of solutions) {
+    let match = true;
+    const usedTargets = new Set();
 
-  // 1) If collisions are ignored → allow free drag
-  if (ignoreCollisions) {
-    console.log("Collision detection disabled. Free drag mode.");
+    for (const piece of pieces) {
+      let foundTarget = false;
+
+      for (const target of solution.targets) {
+        if (usedTargets.has(target.id)) continue;
+        if (isClose(piece, target)) {
+          usedTargets.add(target.id);
+          foundTarget = true;
+          break;
+        }
+      }
+
+      if (!foundTarget) {
+        match = false;
+        break;
+      }
+    }
+
+    if (match) return true;
   }
-
-  // 2) Compare each piece with the reference shape
-  const matches = pieces.map((piece) =>
-    checkOverlayMatch(piece, targetShape, tolerancePx, toleranceDeg)
-  );
-
-  // 3) Return true only if all pieces match
-  return matches.every(Boolean);
+  return false;
 }
 
-// Overlay match check (simplified placeholder)
-function checkOverlayMatch(piece, targetShape, tolerancePx, toleranceDeg) {
-  // In reality: you’d compare vector paths or use pixel overlay analysis
-  // Here we simulate by comparing positions and rotation to target
-  const dx = Math.abs(piece.x - targetShape[piece.id].x);
-  const dy = Math.abs(piece.y - targetShape[piece.id].y);
-  const dRot = Math.abs(piece.rotation - targetShape[piece.id].rotation);
+function isClose(piece, target) {
+  const dx = piece.x - target.x;
+  const dy = piece.y - target.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance > TOLERANCE_PX) return false;
 
-  const positionOk = dx <= tolerancePx && dy <= tolerancePx;
-  const rotationOk = dRot <= toleranceDeg;
+  // Rotation tolerance
+  const rot = ((piece.rotation % 360) + 360) % 360;
+  const targetRot = ((target.rotation % 360) + 360) % 360;
 
-  return positionOk && rotationOk;
+  if (target.type === "square") {
+    return Math.abs(rot % 90) < TOLERANCE_DEG;
+  } else if (target.type === "parallelogram") {
+    return Math.abs(rot % 180) < TOLERANCE_DEG;
+  } else {
+    return Math.abs(rot - targetRot) < TOLERANCE_DEG;
+  }
 }
+
+// --- Show UI ---
+figma.showUI(__html__, { width: 500, height: 500 });
