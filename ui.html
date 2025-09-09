@@ -1,223 +1,80 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>Tangram Game</title>
-  <style>
-    body {
-      font-family: Inter, sans-serif;
-      margin: 0;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    #container {
-      display: flex;
-      gap: 20px;
-    }
-    #board {
-      width: 400px;
-      height: 400px;
-      border: 1px solid #ccc;
-      position: relative;
-      background: #f9f9f9;
-    }
-    .piece {
-      position: absolute;
-      cursor: grab;
-      user-select: none;
-      transition: left 0.15s ease, top 0.15s ease, transform 0.15s ease;
-    }
-    #preview {
-      width: 180px;
-      border: 1px solid #ddd;
-      padding: 5px;
-      background: #fff;
-    }
-    #preview svg {
-      width: 100%;
-      height: auto;
-    }
-  </style>
-</head>
-<body>
-  <h3>Tangram</h3>
-  <div id="container">
-    <div id="board"></div>
-    <div id="preview"><p>Preview se načte sem…</p></div>
-  </div>
-  <button id="check">Check Solution</button>
+const TOLERANCE_PX = 25;   // větší tolerance pro pozici
+const TOLERANCE_DEG = 20;  // větší tolerance pro rotaci
 
-  <script>
-    const board = document.getElementById("board");
-    const preview = document.getElementById("preview");
-    let targets = [];
-    let lastClicked = null;
+figma.ui.onmessage = async (msg) => {
+  if (msg.type === 'validate-shape') {
+    const { pieces, targets } = msg;
+    const success = validatePuzzle(pieces, targets);
+    figma.ui.postMessage({ type: 'validation-result', success });
+  }
 
-    // 7 základních dílků
-    const pieces = [
-      { id: "bigTriangle1", x: 20, y: 20, type: "triangle" },
-      { id: "bigTriangle2", x: 120, y: 20, type: "triangle" },
-      { id: "mediumTriangle", x: 220, y: 20, type: "triangle" },
-      { id: "smallTriangle1", x: 20, y: 120, type: "triangle" },
-      { id: "smallTriangle2", x: 120, y: 120, type: "triangle" },
-      { id: "square", x: 220, y: 120, type: "square" },
-      { id: "parallelogram", x: 320, y: 20, type: "parallelogram" }
-    ];
+  if (msg.type === 'load-solution') {
+    const node = figma.currentPage.findOne(n => n.name === msg.shapeName);
+    if (node) {
+      const clone = node.clone();
+      clone.rescale(1); // reset zdeformovaného scale
+      const svg = await clone.exportAsync({ format: "SVG" });
+      clone.remove();
 
-    // render dílků
-    pieces.forEach(p => {
-      const el = document.createElement("div");
-      el.classList.add("piece");
-      el.style.left = p.x + "px";
-      el.style.top = p.y + "px";
-      el.dataset.id = p.id;
-      el.dataset.type = p.type;
-      el.dataset.rotation = "0";
+      const targets = [];
+      let idCounter = 0;
+      node.findAll(n => n.type === "VECTOR" || n.type === "FRAME").forEach(child => {
+        if (!child.absoluteBoundingBox) return;
+        const bb = child.absoluteBoundingBox;
+        const cx = bb.x + bb.width / 2 - node.absoluteBoundingBox.x;
+        const cy = bb.y + bb.height / 2 - node.absoluteBoundingBox.y;
+        const rot = child.rotation || 0;
+        const id = child.name || `piece${idCounter++}`;
 
-      el.style.width = "60px";
-      el.style.height = "60px";
-      el.style.background = "#aaa";
-      el.style.opacity = "0.8";
+        let type = "triangle";
+        if (id.toLowerCase().includes("square")) type = "square";
+        if (id.toLowerCase().includes("parallelogram")) type = "parallelogram";
 
-      el.addEventListener("click", () => { lastClicked = el; });
-      board.appendChild(el);
-      makeDraggable(el);
-    });
-
-    function makeDraggable(el) {
-      let offsetX, offsetY;
-      el.addEventListener("mousedown", e => {
-        offsetX = e.offsetX;
-        offsetY = e.offsetY;
-        el.style.cursor = "grabbing";
-
-        const onMove = ev => {
-          el.style.left = ev.pageX - board.offsetLeft - offsetX + "px";
-          el.style.top = ev.pageY - board.offsetTop - offsetY + "px";
-        };
-
-        const onUp = () => {
-          el.style.cursor = "grab";
-          document.removeEventListener("mousemove", onMove);
-          document.removeEventListener("mouseup", onUp);
-          snapToNearest(el);
-          snapEdges(el);
-        };
-
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp);
+        targets.push({ id, x: cx, y: cy, rotation: rot, type });
       });
 
-      el.addEventListener("dblclick", () => {
-        let rot = parseInt(el.dataset.rotation || "0");
-        rot = (rot + 45) % 360;
-        el.dataset.rotation = rot;
-        el.style.transform = `rotate(${rot}deg)`;
+      figma.ui.postMessage({ 
+        type: 'solution-loaded', 
+        svg: svg.toString(), 
+        name: msg.shapeName, 
+        targets 
       });
+    } else {
+      figma.ui.postMessage({ type: 'solution-error', error: 'Shape not found in file.' });
     }
+  }
+};
 
-    // Snap na targety sneak peek
-    function snapToNearest(el) {
-      const id = el.dataset.id;
-      const rect = el.getBoundingClientRect();
-      const boardRect = board.getBoundingClientRect();
-      const x = rect.left - boardRect.left + rect.width/2;
-      const y = rect.top - boardRect.top + rect.height/2;
-      const rot = parseInt(el.dataset.rotation || "0");
-
-      for (const target of targets) {
-        if (target.id === id) {
-          const dx = x - target.x;
-          const dy = y - target.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist < 12) {
-            el.style.left = (target.x - rect.width/2) + "px";
-            el.style.top = (target.y - rect.height/2) + "px";
-            el.style.transform = `rotate(${rot}deg)`;
-          }
-        }
+function validatePuzzle(pieces, targets) {
+  for (const piece of pieces) {
+    let ok = false;
+    for (const target of targets) {
+      if (piece.id === target.id && isClose(piece, target)) {
+        ok = true;
+        break;
       }
     }
+    if (!ok) return false;
+  }
+  return true;
+}
 
-    // Snap hran dílků
-    function snapEdges(el) {
-      const allPieces = document.querySelectorAll(".piece");
-      const rect = el.getBoundingClientRect();
-      for (const other of allPieces) {
-        if (other === el) continue;
-        const orect = other.getBoundingClientRect();
-        const boardRect = board.getBoundingClientRect();
+function isClose(piece, target) {
+  const dx = piece.x - target.x;
+  const dy = piece.y - target.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist > TOLERANCE_PX) return false;
 
-        // horizontální zarovnání
-        if (Math.abs(rect.right - orect.left) < 6) {
-          el.style.left = (orect.left - boardRect.left - rect.width) + "px";
-        }
-        if (Math.abs(rect.left - orect.right) < 6) {
-          el.style.left = (orect.right - boardRect.left) + "px";
-        }
-        // vertikální zarovnání
-        if (Math.abs(rect.bottom - orect.top) < 6) {
-          el.style.top = (orect.top - boardRect.top - rect.height) + "px";
-        }
-        if (Math.abs(rect.top - orect.bottom) < 6) {
-          el.style.top = (orect.bottom - boardRect.top) + "px";
-        }
-      }
-    }
+  const rot = ((piece.rotation % 360) + 360) % 360;
+  const targetRot = ((target.rotation % 360) + 360) % 360;
 
-    // Keyboard ovládání šipkami
-    document.addEventListener("keydown", (e) => {
-      if (!lastClicked) return;
-      const step = 5;
-      const left = parseInt(lastClicked.style.left) || 0;
-      const top = parseInt(lastClicked.style.top) || 0;
+  if (target.type === "square") {
+    return Math.abs(rot % 90) < TOLERANCE_DEG;
+  } else if (target.type === "parallelogram") {
+    return Math.abs(rot % 180) < TOLERANCE_DEG;
+  } else {
+    return Math.abs(rot - targetRot) < TOLERANCE_DEG;
+  }
+}
 
-      if (e.key === "ArrowUp") lastClicked.style.top = (top - step) + "px";
-      if (e.key === "ArrowDown") lastClicked.style.top = (top + step) + "px";
-      if (e.key === "ArrowLeft") lastClicked.style.left = (left - step) + "px";
-      if (e.key === "ArrowRight") lastClicked.style.left = (left + step) + "px";
-    });
-
-    document.getElementById("check").onclick = () => {
-      const state = Array.from(document.querySelectorAll(".piece")).map(el => {
-        const rect = el.getBoundingClientRect();
-        return {
-          id: el.dataset.id,
-          type: el.dataset.type,
-          x: rect.left - board.getBoundingClientRect().left + rect.width/2,
-          y: rect.top - board.getBoundingClientRect().top + rect.height/2,
-          rotation: parseInt(el.dataset.rotation || "0")
-        };
-      });
-
-      parent.postMessage({ 
-        pluginMessage: { 
-          type: "validate-shape", 
-          pieces: state, 
-          targets 
-        } 
-      }, "*");
-    };
-
-    onmessage = (event) => {
-      const msg = event.data.pluginMessage;
-      if (msg.type === "validation-result") {
-        if (msg.success) alert("🎉 Correct solution!");
-        else alert("Not yet, keep trying.");
-      }
-      if (msg.type === "solution-loaded") {
-        preview.innerHTML = msg.svg;
-        targets = msg.targets;
-      }
-      if (msg.type === "solution-error") {
-        preview.innerHTML = `<p style="color:red">${msg.error}</p>`;
-      }
-    };
-
-    // Default: načteme sneak peek pro Camel
-    parent.postMessage({ pluginMessage: { type: 'load-solution', shapeName: 'Camel shape' }}, "*");
-  </script>
-</body>
-</html>
+figma.showUI(__html__, { width: 600, height: 500 });
