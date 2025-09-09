@@ -1,49 +1,166 @@
-// Parameters: tolerance for snapping
-const TOLERANCE_PX = 10;
-const TOLERANCE_DEG = 15;
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Tangram Game</title>
+  <style>
+    body {
+      font-family: Inter, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #board {
+      width: 450px;
+      height: 450px;
+      border: 1px solid #ccc;
+      position: relative;
+      background: #f9f9f9;
+    }
+    .piece {
+      position: absolute;
+      cursor: grab;
+      user-select: none;
+    }
+    .piece object {
+      width: 80px;
+      height: 80px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <h3>Tangram</h3>
+  <div id="board"></div>
+  <button id="check">Check Solution</button>
 
-// Listen for messages from Figma UI or host app
-figma.ui.onmessage = async (msg) => {
-  if (msg.type === 'validate-shape') {
-    const { pieces, reference } = msg; 
-    // pieces = array of {x, y, width, height, rotation}
-    // reference = {imageUrl, width, height}
+  <script>
+    const board = document.getElementById("board");
 
-    // Fake validation for now (since real pixel overlay requires Canvas API)
-    // We’ll simulate with bounding box + tolerance checks
+    // --- 7 Tangram pieces (SVG linky z GitHubu) ---
+    const pieces = [
+      { id: "bigTriangle1", src: "https://raw.githubusercontent.com/ErikaBartosova/Tangram-vectors/main/bigTriangle1.svg", x: 20, y: 20 },
+      { id: "bigTriangle2", src: "https://raw.githubusercontent.com/ErikaBartosova/Tangram-vectors/main/bigTriangle2.svg", x: 120, y: 20 },
+      { id: "mediumTriangle", src: "https://raw.githubusercontent.com/ErikaBartosova/Tangram-vectors/main/mediumTriangle.svg", x: 220, y: 20 },
+      { id: "smallTriangle1", src: "https://raw.githubusercontent.com/ErikaBartosova/Tangram-vectors/main/smallTriangle1.svg", x: 20, y: 120 },
+      { id: "smallTriangle2", src: "https://raw.githubusercontent.com/ErikaBartosova/Tangram-vectors/main/smallTriangle2.svg", x: 120, y: 120 },
+      { id: "square", src: "https://raw.githubusercontent.com/ErikaBartosova/Tangram-vectors/main/square.svg", x: 220, y: 120 },
+      { id: "parallelogram", src: "https://raw.githubusercontent.com/ErikaBartosova/Tangram-vectors/main/parallelogram.svg", x: 320, y: 20 }
+    ];
 
-    let allInside = true;
-
-    for (const piece of pieces) {
-      // Approximate center position
-      const cx = piece.x + piece.width / 2;
-      const cy = piece.y + piece.height / 2;
-
-      // Check if within reference boundaries (simplified rectangle)
-      if (cx < -TOLERANCE_PX || cx > reference.width + TOLERANCE_PX ||
-          cy < -TOLERANCE_PX || cy > reference.height + TOLERANCE_PX) {
-        allInside = false;
-        break;
+    // --- Example solutions (doplň vlastní) ---
+    const solutions = [
+      {
+        name: "solution1",
+        targets: [
+          { id: "bigTriangle1", x: 100, y: 300, rotation: 0, type: "triangle" },
+          { id: "bigTriangle2", x: 200, y: 300, rotation: 0, type: "triangle" },
+          { id: "mediumTriangle", x: 150, y: 200, rotation: 0, type: "triangle" },
+          { id: "smallTriangle1", x: 250, y: 200, rotation: 0, type: "triangle" },
+          { id: "smallTriangle2", x: 300, y: 250, rotation: 0, type: "triangle" },
+          { id: "square", x: 200, y: 150, rotation: 0, type: "square" },
+          { id: "parallelogram", x: 120, y: 250, rotation: 0, type: "parallelogram" }
+        ]
       }
+    ];
 
-      // Check rotation tolerance
-      const normalizedRotation = ((piece.rotation % 360) + 360) % 360;
-      const snapRotation = Math.round(normalizedRotation / TOLERANCE_DEG) * TOLERANCE_DEG;
-      const rotationDiff = Math.abs(normalizedRotation - snapRotation);
+    // --- Render pieces ---
+    pieces.forEach(p => {
+      const el = document.createElement("div");
+      el.classList.add("piece");
+      el.style.left = p.x + "px";
+      el.style.top = p.y + "px";
+      el.dataset.id = p.id;
+      el.dataset.rotation = "0";
+      el.innerHTML = `<object type="image/svg+xml" data="${p.src}"></object>`;
+      board.appendChild(el);
 
-      if (rotationDiff > TOLERANCE_DEG) {
-        allInside = false;
-        break;
+      makeDraggable(el);
+    });
+
+    function makeDraggable(el) {
+      let offsetX, offsetY;
+      el.addEventListener("mousedown", e => {
+        offsetX = e.offsetX;
+        offsetY = e.offsetY;
+        el.style.cursor = "grabbing";
+
+        const onMove = ev => {
+          el.style.left = ev.pageX - board.offsetLeft - offsetX + "px";
+          el.style.top = ev.pageY - board.offsetTop - offsetY + "px";
+        };
+
+        const onUp = () => {
+          el.style.cursor = "grab";
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          snapToNearest(el);
+        };
+
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+
+      // rotate on double click
+      el.addEventListener("dblclick", () => {
+        let rot = parseInt(el.dataset.rotation || "0");
+        rot = (rot + 45) % 360;
+        el.dataset.rotation = rot;
+        el.style.transform = `rotate(${rot}deg)`;
+      });
+    }
+
+    function snapToNearest(el) {
+      const id = el.dataset.id;
+      const rect = el.getBoundingClientRect();
+      const x = rect.left - board.getBoundingClientRect().left + rect.width/2;
+      const y = rect.top - board.getBoundingClientRect().top + rect.height/2;
+      const rot = parseInt(el.dataset.rotation || "0");
+
+      for (const target of solutions[0].targets) {
+        if (target.id === id) {
+          const dx = x - target.x;
+          const dy = y - target.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < 20) {
+            el.style.left = (target.x - rect.width/2) + "px";
+            el.style.top = (target.y - rect.height/2) + "px";
+            el.style.transform = `rotate(${rot}deg)`;
+          }
+        }
       }
     }
 
-    if (allInside) {
-      figma.ui.postMessage({ type: 'validation-result', success: true });
-    } else {
-      figma.ui.postMessage({ type: 'validation-result', success: false });
-    }
-  }
-};
+    document.getElementById("check").onclick = () => {
+      const state = Array.from(document.querySelectorAll(".piece")).map(el => {
+        const rect = el.getBoundingClientRect();
+        return {
+          id: el.dataset.id,
+          x: rect.left - board.getBoundingClientRect().left + rect.width/2,
+          y: rect.top - board.getBoundingClientRect().top + rect.height/2,
+          rotation: parseInt(el.dataset.rotation || "0")
+        };
+      });
 
-// Show UI when plugin runs
-figma.showUI(__html__, { width: 300, height: 200 });
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: "validate-shape", 
+          pieces: state, 
+          solutions 
+        } 
+      }, "*");
+    };
+
+    onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (msg.type === "validation-result") {
+        if (msg.success) alert("🎉 Correct solution!");
+        else alert("Not yet, keep trying.");
+      }
+    };
+  </script>
+</body>
+</html>
