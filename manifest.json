@@ -1,18 +1,8 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>Shape Overlay Validator</title>
-  <style>
-    body {
-      font-family: Inter, sans-serif;
-      font-size: 14px;
-      padding: 10px;
-    }
-  </style>
-</head>
-<body>
-  <h3>Shape Overlay Validator</h3>
-  <p>This plugin checks if tangram pieces match the reference shape within tolerance.</p>
-</body>
-</html>
+{
+  "name": "Tangram Game",
+  "id": "tangram-game",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma", "figjam"]
+}
