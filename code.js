@@ -6,7 +6,6 @@ const TOLERANCE_DEG = 15;  // snap rotace
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'validate-shape') {
     const { pieces, solutions } = msg;
-
     const success = validatePuzzle(pieces, solutions);
     figma.ui.postMessage({ type: 'validation-result', success });
   }
