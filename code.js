@@ -1,7 +1,6 @@
 const TOLERANCE_PX = 12;
 const TOLERANCE_DEG = 15;
 
-// zprávy z UI
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'validate-shape') {
     const { pieces, targets } = msg;
@@ -10,20 +9,41 @@ figma.ui.onmessage = async (msg) => {
   }
 
   if (msg.type === 'load-solution') {
-    // najdeme ve Figmě vektor s názvem (např. "Camel shape")
     const node = figma.currentPage.findOne(n => n.name === msg.shapeName);
     if (node) {
       const svg = await node.exportAsync({ format: "SVG" });
       const svgString = new TextDecoder("utf-8").decode(svg);
-      // pošleme do UI
-      figma.ui.postMessage({ type: 'solution-loaded', svg: svgString, name: msg.shapeName });
+
+      // spočítáme targets z podtvarů
+      const targets = [];
+      let idCounter = 0;
+      node.findAll(n => n.type === "VECTOR" || n.type === "FRAME").forEach(child => {
+        if (!child.absoluteBoundingBox) return;
+        const bb = child.absoluteBoundingBox;
+        const cx = bb.x + bb.width / 2 - node.absoluteBoundingBox.x;
+        const cy = bb.y + bb.height / 2 - node.absoluteBoundingBox.y;
+        const rot = child.rotation || 0;
+        const id = child.name || `piece${idCounter++}`;
+
+        let type = "triangle";
+        if (id.toLowerCase().includes("square")) type = "square";
+        if (id.toLowerCase().includes("parallelogram")) type = "parallelogram";
+
+        targets.push({ id, x: cx, y: cy, rotation: rot, type });
+      });
+
+      figma.ui.postMessage({ 
+        type: 'solution-loaded', 
+        svg: svgString, 
+        name: msg.shapeName, 
+        targets 
+      });
     } else {
       figma.ui.postMessage({ type: 'solution-error', error: 'Shape not found in file.' });
     }
   }
 };
 
-// validace – porovnání pozic dílků s targety
 function validatePuzzle(pieces, targets) {
   let match = true;
   const used = new Set();
