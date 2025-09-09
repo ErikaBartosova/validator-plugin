@@ -7,15 +7,18 @@
     body {
       font-family: Inter, sans-serif;
       margin: 0;
-      padding: 0;
+      padding: 10px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+    }
+    #container {
+      display: flex;
+      gap: 20px;
     }
     #board {
-      width: 450px;
-      height: 450px;
+      width: 400px;
+      height: 400px;
       border: 1px solid #ccc;
       position: relative;
       background: #f9f9f9;
@@ -24,60 +27,63 @@
       position: absolute;
       cursor: grab;
       user-select: none;
+      transition: left 0.15s ease, top 0.15s ease, transform 0.15s ease;
     }
-    .piece object {
-      width: 80px;
-      height: 80px;
-      pointer-events: none;
+    #preview {
+      width: 180px;
+      border: 1px solid #ddd;
+      padding: 5px;
+      background: #fff;
+    }
+    #preview svg {
+      width: 100%;
+      height: auto;
     }
   </style>
 </head>
 <body>
   <h3>Tangram</h3>
-  <div id="board"></div>
+  <div id="container">
+    <div id="board"></div>
+    <div id="preview"><p>Preview se načte sem…</p></div>
+  </div>
   <button id="check">Check Solution</button>
 
   <script>
     const board = document.getElementById("board");
+    const preview = document.getElementById("preview");
 
-    // --- 7 Tangram pieces (správné raw GitHub linky) ---
-   const pieces = [
-  { id: "bigTriangle1", x: 20, y: 20 },
-  { id: "bigTriangle2", x: 120, y: 20 },
-  { id: "mediumTriangle", x: 220, y: 20 },
-  { id: "smallTriangle1", x: 20, y: 120 },
-  { id: "smallTriangle2", x: 120, y: 120 },
-  { id: "square", x: 220, y: 120 },
-  { id: "parallelogram", x: 320, y: 20 }
-];
-
-    // --- Example solution (zatím 1, můžeš dopsat další) ---
-    const solutions = [
-      {
-        name: "solution1",
-        targets: [
-          { id: "bigTriangle1", x: 100, y: 300, rotation: 0, type: "triangle" },
-          { id: "bigTriangle2", x: 200, y: 300, rotation: 0, type: "triangle" },
-          { id: "mediumTriangle", x: 150, y: 200, rotation: 0, type: "triangle" },
-          { id: "smallTriangle1", x: 250, y: 200, rotation: 0, type: "triangle" },
-          { id: "smallTriangle2", x: 300, y: 250, rotation: 0, type: "triangle" },
-          { id: "square", x: 200, y: 150, rotation: 0, type: "square" },
-          { id: "parallelogram", x: 120, y: 250, rotation: 0, type: "parallelogram" }
-        ]
-      }
+    // --- definice 7 základních dílků ---
+    const pieces = [
+      { id: "bigTriangle1", x: 20, y: 20, type: "triangle" },
+      { id: "bigTriangle2", x: 120, y: 20, type: "triangle" },
+      { id: "mediumTriangle", x: 220, y: 20, type: "triangle" },
+      { id: "smallTriangle1", x: 20, y: 120, type: "triangle" },
+      { id: "smallTriangle2", x: 120, y: 120, type: "triangle" },
+      { id: "square", x: 220, y: 120, type: "square" },
+      { id: "parallelogram", x: 320, y: 20, type: "parallelogram" }
     ];
 
-    // --- Render pieces ---
+    // --- zatím prázdné řešení (bude se načítat z Figma souboru) ---
+    let targets = [];
+
+    // přidání dílků na board
     pieces.forEach(p => {
       const el = document.createElement("div");
       el.classList.add("piece");
       el.style.left = p.x + "px";
       el.style.top = p.y + "px";
       el.dataset.id = p.id;
+      el.dataset.type = p.type;
       el.dataset.rotation = "0";
-      el.innerHTML = `<object type="image/svg+xml" data="${p.src}"></object>`;
-      board.appendChild(el);
 
+      // pro zobrazení stačí jednoduchý tvar (barevný blok)
+      el.style.width = "60px";
+      el.style.height = "60px";
+      el.style.background = "#aaa";
+      el.style.opacity = "0.8";
+
+      board.appendChild(el);
       makeDraggable(el);
     });
 
@@ -104,7 +110,6 @@
         document.addEventListener("mouseup", onUp);
       });
 
-      // rotate on double click
       el.addEventListener("dblclick", () => {
         let rot = parseInt(el.dataset.rotation || "0");
         rot = (rot + 45) % 360;
@@ -116,16 +121,18 @@
     function snapToNearest(el) {
       const id = el.dataset.id;
       const rect = el.getBoundingClientRect();
-      const x = rect.left - board.getBoundingClientRect().left + rect.width/2;
-      const y = rect.top - board.getBoundingClientRect().top + rect.height/2;
+      const boardRect = board.getBoundingClientRect();
+      const x = rect.left - boardRect.left + rect.width/2;
+      const y = rect.top - boardRect.top + rect.height/2;
       const rot = parseInt(el.dataset.rotation || "0");
 
-      for (const target of solutions[0].targets) {
+      for (const target of targets) {
         if (target.id === id) {
           const dx = x - target.x;
           const dy = y - target.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist < 20) {
+
+          if (dist < 12) {
             el.style.left = (target.x - rect.width/2) + "px";
             el.style.top = (target.y - rect.height/2) + "px";
             el.style.transform = `rotate(${rot}deg)`;
@@ -139,6 +146,7 @@
         const rect = el.getBoundingClientRect();
         return {
           id: el.dataset.id,
+          type: el.dataset.type,
           x: rect.left - board.getBoundingClientRect().left + rect.width/2,
           y: rect.top - board.getBoundingClientRect().top + rect.height/2,
           rotation: parseInt(el.dataset.rotation || "0")
@@ -149,7 +157,7 @@
         pluginMessage: { 
           type: "validate-shape", 
           pieces: state, 
-          solutions 
+          targets 
         } 
       }, "*");
     };
@@ -160,7 +168,18 @@
         if (msg.success) alert("🎉 Correct solution!");
         else alert("Not yet, keep trying.");
       }
+      if (msg.type === "solution-loaded") {
+        preview.innerHTML = msg.svg;
+        // TODO: tady nastavíš "targets" = souřadnice pro validaci
+        // pro demo teď necháme prázdné
+      }
+      if (msg.type === "solution-error") {
+        preview.innerHTML = `<p style="color:red">${msg.error}</p>`;
+      }
     };
+
+    // pro začátek – načteme sneak peek pro Camel
+    parent.postMessage({ pluginMessage: { type: 'load-solution', shapeName: 'Camel shape' }}, "*");
   </script>
 </body>
 </html>
