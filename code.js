@@ -1,52 +1,57 @@
-// --- Parameters ---
-const TOLERANCE_PX = 15;   // snap vzdálenost
-const TOLERANCE_DEG = 15;  // snap rotace
+const TOLERANCE_PX = 12;
+const TOLERANCE_DEG = 15;
 
-// --- Messages from UI ---
+// zprávy z UI
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'validate-shape') {
-    const { pieces, solutions } = msg;
-    const success = validatePuzzle(pieces, solutions);
+    const { pieces, targets } = msg;
+    const success = validatePuzzle(pieces, targets);
     figma.ui.postMessage({ type: 'validation-result', success });
+  }
+
+  if (msg.type === 'load-solution') {
+    // najdeme ve Figmě vektor s názvem (např. "Camel shape")
+    const node = figma.currentPage.findOne(n => n.name === msg.shapeName);
+    if (node) {
+      const svg = await node.exportAsync({ format: "SVG" });
+      const svgString = new TextDecoder("utf-8").decode(svg);
+      // pošleme do UI
+      figma.ui.postMessage({ type: 'solution-loaded', svg: svgString, name: msg.shapeName });
+    } else {
+      figma.ui.postMessage({ type: 'solution-error', error: 'Shape not found in file.' });
+    }
   }
 };
 
-// --- Validation ---
-function validatePuzzle(pieces, solutions) {
-  for (const solution of solutions) {
-    let match = true;
-    const usedTargets = new Set();
+// validace – porovnání pozic dílků s targety
+function validatePuzzle(pieces, targets) {
+  let match = true;
+  const used = new Set();
 
-    for (const piece of pieces) {
-      let foundTarget = false;
-
-      for (const target of solution.targets) {
-        if (usedTargets.has(target.id)) continue;
-        if (isClose(piece, target)) {
-          usedTargets.add(target.id);
-          foundTarget = true;
-          break;
-        }
-      }
-
-      if (!foundTarget) {
-        match = false;
+  for (const piece of pieces) {
+    let found = false;
+    for (const target of targets) {
+      if (used.has(target.id)) continue;
+      if (isClose(piece, target)) {
+        used.add(target.id);
+        found = true;
         break;
       }
     }
-
-    if (match) return true;
+    if (!found) {
+      match = false;
+      break;
+    }
   }
-  return false;
+  return match;
 }
 
 function isClose(piece, target) {
   const dx = piece.x - target.x;
   const dy = piece.y - target.y;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  if (distance > TOLERANCE_PX) return false;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist > TOLERANCE_PX) return false;
 
-  // Rotation tolerance
   const rot = ((piece.rotation % 360) + 360) % 360;
   const targetRot = ((target.rotation % 360) + 360) % 360;
 
@@ -59,5 +64,4 @@ function isClose(piece, target) {
   }
 }
 
-// --- Show UI ---
-figma.showUI(__html__, { width: 500, height: 500 });
+figma.showUI(__html__, { width: 600, height: 500 });
