@@ -161,22 +161,22 @@
         } 
       }, "*");
     };
+let targets = [];
 
-    onmessage = (event) => {
-      const msg = event.data.pluginMessage;
-      if (msg.type === "validation-result") {
-        if (msg.success) alert("🎉 Correct solution!");
-        else alert("Not yet, keep trying.");
-      }
-      if (msg.type === "solution-loaded") {
-        preview.innerHTML = msg.svg;
-        // TODO: tady nastavíš "targets" = souřadnice pro validaci
-        // pro demo teď necháme prázdné
-      }
-      if (msg.type === "solution-error") {
-        preview.innerHTML = `<p style="color:red">${msg.error}</p>`;
-      }
-    };
+onmessage = (event) => {
+  const msg = event.data.pluginMessage;
+  if (msg.type === "validation-result") {
+    if (msg.success) alert("🎉 Correct solution!");
+    else alert("Not yet, keep trying.");
+  }
+  if (msg.type === "solution-loaded") {
+    preview.innerHTML = msg.svg;
+    targets = msg.targets; // tady už máme spočítané targety
+  }
+  if (msg.type === "solution-error") {
+    preview.innerHTML = `<p style="color:red">${msg.error}</p>`;
+  }
+};
 
     // pro začátek – načteme sneak peek pro Camel
     parent.postMessage({ pluginMessage: { type: 'load-solution', shapeName: 'Camel shape' }}, "*");
