@@ -11,10 +11,13 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === 'load-solution') {
     const node = figma.currentPage.findOne(n => n.name === msg.shapeName);
     if (node) {
+      // reset proporcí (zabrání deformacím)
+      node.rescale(1);
+
       const svg = await node.exportAsync({ format: "SVG" });
       const svgString = new TextDecoder("utf-8").decode(svg);
 
-      // spočítáme targets z podtvarů
+      // spočítáme targety z podsložek
       const targets = [];
       let idCounter = 0;
       node.findAll(n => n.type === "VECTOR" || n.type === "FRAME").forEach(child => {
