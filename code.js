@@ -1,5 +1,5 @@
-const TOLERANCE_PX = 12;
-const TOLERANCE_DEG = 15;
+const TOLERANCE_PX = 25;   // větší tolerance pro pozici
+const TOLERANCE_DEG = 20;  // větší tolerance pro rotaci
 
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'validate-shape') {
@@ -11,13 +11,11 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === 'load-solution') {
     const node = figma.currentPage.findOne(n => n.name === msg.shapeName);
     if (node) {
-      // reset proporcí (zabrání deformacím)
-      node.rescale(1);
+      const clone = node.clone();
+      clone.rescale(1); // reset zdeformovaného scale
+      const svg = await clone.exportAsync({ format: "SVG" });
+      clone.remove();
 
-      const svg = await node.exportAsync({ format: "SVG" });
-      const svgString = new TextDecoder("utf-8").decode(svg);
-
-      // spočítáme targety z podsložek
       const targets = [];
       let idCounter = 0;
       node.findAll(n => n.type === "VECTOR" || n.type === "FRAME").forEach(child => {
@@ -37,7 +35,7 @@ figma.ui.onmessage = async (msg) => {
 
       figma.ui.postMessage({ 
         type: 'solution-loaded', 
-        svg: svgString, 
+        svg: svg.toString(), 
         name: msg.shapeName, 
         targets 
       });
@@ -48,25 +46,17 @@ figma.ui.onmessage = async (msg) => {
 };
 
 function validatePuzzle(pieces, targets) {
-  let match = true;
-  const used = new Set();
-
   for (const piece of pieces) {
-    let found = false;
+    let ok = false;
     for (const target of targets) {
-      if (used.has(target.id)) continue;
-      if (isClose(piece, target)) {
-        used.add(target.id);
-        found = true;
+      if (piece.id === target.id && isClose(piece, target)) {
+        ok = true;
         break;
       }
     }
-    if (!found) {
-      match = false;
-      break;
-    }
+    if (!ok) return false;
   }
-  return match;
+  return true;
 }
 
 function isClose(piece, target) {
